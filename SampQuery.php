@@ -5,13 +5,20 @@
 	Read more on SA-MP's Query mechanism: https://sampwiki.blast.hk/wiki/Query_Mechanism
 */
 
+enum Opcode: string {
+	case Info            = 'i';
+	case Rules           = 'r';
+	case Players         = 'c';
+	case DetailedPlayers = 'd';
+}
+
 class SampQuery {
 	private $socket;
 	private $packet;
 
 	public function __construct(
 		public readonly string $host,
-		public readonly int $port,
+		public readonly int $port = 7777,
 		int $timeout = 1000
 	) {
 		if (!filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) throw new InvalidArgumentException("Invalid host: $host");
@@ -43,7 +50,7 @@ class SampQuery {
 	}
 
 	public function getInfo(): array {
-		$response = $this->sendRequest('i');
+		$response = $this->sendRequest(Opcode::Info);
 		
 		$result = [];
 		$offset = 0;
@@ -73,7 +80,7 @@ class SampQuery {
 	}
 
 	public function getRules(): array {
-		$response = $this->sendRequest('r');
+		$response = $this->sendRequest(Opcode::Rules);
 
 		$offset    = 0;
 		$numRules  = unpack('v', substr($response, $offset, 2))[1];
@@ -95,8 +102,9 @@ class SampQuery {
 		return $result;
 	}
 
+	// * Some servers don't reply to the detailed packet
 	public function getPlayers(bool $detailed = false): array {
-		$response = $this->sendRequest($detailed ? 'd' : 'c');
+		$response = $this->sendRequest($detailed ? Opcode::DetailedPlayers : Opcode::Players);
 
 		$offset       = 0;
 		$playerCount  = unpack('v', substr($response, $offset, 2))[1];
@@ -134,8 +142,23 @@ class SampQuery {
 		return $players;
 	}
 
-	private function sendRequest(string $opcode): string {
-		$packet = $this->packet . $opcode;
+	public function query(Opcode $opcode): array|null {
+		$method = match ($opcode) {
+			Opcode::Info => 'getInfo',
+			Opcode::Rules => 'getRules',
+			Opcode::Players, Opcode::DetailedPlayers => 'getPlayers',
+			default => null,
+		};
+
+		if (!$method) return null;
+
+		if ($method === 'getPlayers') return $this->$method($opcode === Opcode::DetailedPlayers);
+		
+		return $this->$method();
+	}
+
+	private function sendRequest(Opcode $opcode): string {
+		$packet = $this->packet . $opcode->value;
 
 		socket_sendto($this->socket, $packet, strlen($packet), 0, $this->host, $this->port);
 
@@ -143,8 +166,11 @@ class SampQuery {
 		$from     = '';
 		$port     = 0;
 		$result   = socket_recvfrom($this->socket, $response, 2048, 0, $from, $port);
-		
-		if ($result === false || strlen($response) < 11) throw new Exception($result === false ? socket_strerror(socket_last_error()) : $response);
+
+		if ($result === false || strlen($response) < 11) {
+			$errorMessage = $result === false ? socket_strerror(socket_last_error($this->socket)) : $response;
+			throw new Exception("Unable to retrieve opcode '$opcode->value' ($opcode->name): $errorMessage", array_search($opcode, Opcode::cases()));
+		}
 
 		return substr($response, 11); // Clip the header away and return what we actually need
 	}
