@@ -54,7 +54,7 @@ try {
 		$result[$key] = $server->query($opcode);
 	}
 
-	echo json_encode(count($result) > 1 ? $result : reset($result), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+	echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (JsonException $e) {
 	http_response_code(500); 
 	echo json_encode(['error' => ['message' => 'JSON Encoding Error: ' . $e->getMessage()]]); 
