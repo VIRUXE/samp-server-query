@@ -16,8 +16,8 @@ try {
 			if ($opcode = Opcode::tryFrom($code))
 				$opcodes[] = $opcode;
 
-	// Default to Info if no valid opcodes provided
-	if (empty($opcodes)) $opcodes[] = Opcode::Info;
+	// Default to Ping if no valid opcodes provided
+	if (empty($opcodes)) $opcodes[] = Opcode::Ping;
 
 	// Handle potential c/d conflict
 	$cIndex = array_search(Opcode::Players, $opcodes);
