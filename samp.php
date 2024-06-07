@@ -34,11 +34,17 @@ try {
 
 		if (!$query) continue;
 
-		$result[match ($opcode) {
+	foreach ($opcodes as $opcode) {
+		$key = match ($opcode) {
 			Opcode::Info => 'info',
 			Opcode::Rules => 'rules',
 			Opcode::Players, Opcode::DetailedPlayers => 'players',
-		}] = $query;
+			Opcode::Ping => 'online'
+		};
+
+		if (key_exists($key, $result)) continue;
+
+		$result[$key] = $server->query($opcode);
 	}
 
 	echo json_encode(count($result) > 1 ? $result : reset($result), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
