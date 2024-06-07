@@ -154,12 +154,12 @@ class SampQuery {
 		return $this->sendRequest(Opcode::Ping, $randomNumbers) === $randomNumbers; // We're good if the server sent back the same random bytes as a response
 	}
 
-	public function query(Opcode $opcode): array|null {
+	public function query(Opcode $opcode): array|bool|null {
 		$method = match ($opcode) {
 			Opcode::Info => 'getInfo',
 			Opcode::Rules => 'getRules',
 			Opcode::Players, Opcode::DetailedPlayers => 'getPlayers',
-			default => null,
+			default => 'ping',
 		};
 
 		if ($method === 'getPlayers') return $this->$method($opcode === Opcode::DetailedPlayers);
