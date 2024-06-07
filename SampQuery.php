@@ -10,6 +10,7 @@ enum Opcode: string {
 	case Rules           = 'r';
 	case Players         = 'c';
 	case DetailedPlayers = 'd';
+	case Ping            = 'p';
 }
 
 class SampQuery {
@@ -21,18 +22,18 @@ class SampQuery {
 		public readonly int $port = 7777,
 		int $timeout = 1000
 	) {
-		if (!filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) throw new InvalidArgumentException("Invalid host: $host");
+		if (!filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) throw new InvalidArgumentException("Invalid host: $host", -1);
 
-		if ($port < 1 || $port > 65535) throw new InvalidArgumentException("Invalid port: $port");
+		if ($port < 1 || $port > 65535) throw new InvalidArgumentException("Invalid port: $port", -1);
 
 		$this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-		if ($this->socket === false) throw new Exception("Failed to create socket: " . socket_strerror(socket_last_error()));
+		if ($this->socket === false) throw new Exception("Failed to create socket: " . socket_strerror(socket_last_error()), -1);
 
-		 // Breakup the ip in parts for the packet signature
+		 // Breakup the ip in parts for the packet "signature"
 		$hostParts = explode('.', gethostbyname($host)); // Try to resolve to an ip, in case a hostname was passed
-		if (count($hostParts) !== 4) throw new Exception("Invalid IP address after DNS resolution: $host");
+		if (count($hostParts) !== 4) throw new Exception("Invalid IP address after DNS resolution: $host", -1);
 
-		// Make up the packet's signature
+		// Make up the packet's "signature"
 		$this->packet = 'SAMP' .
 			chr($hostParts[0]) .
 			chr($hostParts[1]) .
@@ -43,11 +44,11 @@ class SampQuery {
 
 		// Set the timeout we want
 		socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, ['sec' => $timeout / 1000, 'usec' => 0]);
+
+		if (!$this->ping()) throw new Exception("Unable to connect to server at $host:$port. Server is offline or did not respond to ping.", -1);
 	}
 
-	public function __destruct() {
-		socket_close($this->socket);
-	}
+	public function __destruct() { socket_close($this->socket); }
 
 	public function getInfo(): array {
 		$response = $this->sendRequest(Opcode::Info);
@@ -142,6 +143,11 @@ class SampQuery {
 		return $players;
 	}
 
+	public function ping(): bool {
+		$randomNumbers = random_bytes(4);
+		return $this->sendRequest(Opcode::Ping, $randomNumbers) === $randomNumbers; // We're good if the server sent back the same random bytes as a response
+	}
+
 	public function query(Opcode $opcode): array|null {
 		$method = match ($opcode) {
 			Opcode::Info => 'getInfo',
@@ -157,8 +163,10 @@ class SampQuery {
 		return $this->$method();
 	}
 
-	private function sendRequest(Opcode $opcode): string {
+	private function sendRequest(Opcode $opcode, ?string $extraData = null): string {
 		$packet = $this->packet . $opcode->value;
+		
+		if (!is_null($extraData)) $packet .= $extraData;
 
 		socket_sendto($this->socket, $packet, strlen($packet), 0, $this->host, $this->port);
 
