@@ -29,10 +29,17 @@ try {
 	$server = new SampQuery($_GET['host'] ?? '127.0.0.1', $_GET['port'] ?? 7777, 1000);
 
 	$result = [];
-	foreach ($opcodes as $opcode) {
-		$query = $server->query($opcode);
+	if (array_search(Opcode::DetailedPlayers, $opcodes)) { // If the 'd' packet is still present
+		// We request the 'i' packet first to check if it's an open.mp server or not
+		$rules = $server->query(Opcode::Rules);
+		$result['rules'] = $rules;
 
-		if (!$query) continue;
+		// If it is, then return packet 'c' - something is better than nothing, right?
+		if ($rules && str_contains($rules['version'], 'omp')) {
+			$players = $server->query(Opcode::Players);
+			if ($players) $result['players'] = $players;
+		}
+	}
 
 	foreach ($opcodes as $opcode) {
 		$key = match ($opcode) {
