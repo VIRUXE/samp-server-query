@@ -44,8 +44,6 @@ class SampQuery {
 
 		// Set the timeout we want
 		socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, ['sec' => $timeout / 1000, 'usec' => 0]);
-
-		if (!$this->ping()) throw new Exception("Unable to connect to server at '$host:$port'. Server is offline or did not respond to ping.");
 	}
 
 	public function __destruct() { socket_close($this->socket); }
