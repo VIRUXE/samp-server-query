@@ -22,16 +22,16 @@ class SampQuery {
 		public readonly int $port = 7777,
 		int $timeout = 1000
 	) {
-		if (!filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) throw new InvalidArgumentException("Invalid host: $host", -1);
-
-		if ($port < 1 || $port > 65535) throw new InvalidArgumentException("Invalid port: $port", -1);
-
+		if (!filter_var($host, FILTER_VALIDATE_IP) && !filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME)) throw new InvalidArgumentException("Invalid host: $host");
+		
+		if ($port < 1 || $port > 65535) throw new InvalidArgumentException("Invalid port: $port");
+		
 		$this->socket = socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
-		if ($this->socket === false) throw new Exception("Failed to create socket: " . socket_strerror(socket_last_error()), -1);
+		if ($this->socket === false) throw new Exception('Failed to create socket: ' . socket_strerror(socket_last_error()));
 
 		 // Breakup the ip in parts for the packet "signature"
 		$hostParts = explode('.', gethostbyname($host)); // Try to resolve to an ip, in case a hostname was passed
-		if (count($hostParts) !== 4) throw new Exception("Invalid IP address after DNS resolution: $host", -1);
+		if (count($hostParts) !== 4) throw new Exception("Invalid IP address after DNS resolution: $host");
 
 		// Make up the packet's "signature"
 		$this->packet = 'SAMP' .
@@ -45,13 +45,15 @@ class SampQuery {
 		// Set the timeout we want
 		socket_set_option($this->socket, SOL_SOCKET, SO_RCVTIMEO, ['sec' => $timeout / 1000, 'usec' => 0]);
 
-		if (!$this->ping()) throw new Exception("Unable to connect to server at $host:$port. Server is offline or did not respond to ping.", -1);
+		if (!$this->ping()) throw new Exception("Unable to connect to server at '$host:$port'. Server is offline or did not respond to ping.");
 	}
 
 	public function __destruct() { socket_close($this->socket); }
 
 	public function getInfo(): array {
 		$response = $this->sendRequest(Opcode::Info);
+
+		if (!$response) return [];
 		
 		$result = [];
 		$offset = 0;
@@ -66,9 +68,9 @@ class SampQuery {
 		$offset += 2;
 
 		function read($response, &$offset) {
-			$length = unpack('V', substr($response, $offset, 4))[1];
+			$length  = unpack('V', substr($response, $offset, 4))[1];
 			$offset += 4;
-			$str = substr($response, $offset, $length);
+			$str     = substr($response, $offset, $length);
 			$offset += $length;
 			return mb_convert_encoding(trim($str), 'UTF-8', 'ISO-8859-1'); // We may encounter some accents
 		}
@@ -82,6 +84,8 @@ class SampQuery {
 
 	public function getRules(): array {
 		$response = $this->sendRequest(Opcode::Rules);
+
+		if (!$response) return [];
 
 		$offset    = 0;
 		$numRules  = unpack('v', substr($response, $offset, 2))[1];
@@ -103,9 +107,11 @@ class SampQuery {
 		return $result;
 	}
 
-	// * Some servers don't reply to the detailed packet
+	// * open.mp servers don't reply to the detailed players packet
 	public function getPlayers(bool $detailed = false): array {
 		$response = $this->sendRequest($detailed ? Opcode::DetailedPlayers : Opcode::Players);
+
+		if (!$response) return [];
 
 		$offset       = 0;
 		$playerCount  = unpack('v', substr($response, $offset, 2))[1];
@@ -156,14 +162,12 @@ class SampQuery {
 			default => null,
 		};
 
-		if (!$method) return null;
-
 		if ($method === 'getPlayers') return $this->$method($opcode === Opcode::DetailedPlayers);
 		
 		return $this->$method();
 	}
 
-	private function sendRequest(Opcode $opcode, ?string $extraData = null): string {
+	private function sendRequest(Opcode $opcode, ?string $extraData = null): ?string {
 		$packet = $this->packet . $opcode->value;
 		
 		if (!is_null($extraData)) $packet .= $extraData;
@@ -171,15 +175,10 @@ class SampQuery {
 		socket_sendto($this->socket, $packet, strlen($packet), 0, $this->host, $this->port);
 
 		$response = '';
-		$from     = '';
+		$address  = '';
 		$port     = 0;
-		$result   = socket_recvfrom($this->socket, $response, 2048, 0, $from, $port);
+		$result   = socket_recvfrom($this->socket, $response, 2048, 0, $address, $port);
 
-		if ($result === false || strlen($response) < 11) {
-			$errorMessage = $result === false ? socket_strerror(socket_last_error($this->socket)) : $response;
-			throw new Exception("Unable to retrieve opcode '$opcode->value' ($opcode->name): $errorMessage", array_search($opcode, Opcode::cases()));
-		}
-
-		return substr($response, 11); // Clip the header away and return what we actually need
+		return $result ? substr($response, 11) : null; // Clip the header away and return what we actually need, or not
 	}
 }
