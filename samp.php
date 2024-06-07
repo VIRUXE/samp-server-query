@@ -57,15 +57,8 @@ try {
 	echo json_encode(count($result) > 1 ? $result : reset($result), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (JsonException $e) {
 	http_response_code(500); 
-	echo json_encode([
-		'error'   => true,
-		'message' => 'JSON Encoding Error: ' . $e->getMessage()
-	]); 
+	echo json_encode(['error' => ['message' => 'JSON Encoding Error: ' . $e->getMessage()]]); 
 } catch (Exception $e) {
 	http_response_code(500); 
-	echo json_encode([
-		'error'   => true,
-		'code'    => $e->getCode(),
-		'message' => $e->getMessage()
-	]);
+	echo json_encode(['error' => ['message' => $e->getMessage()]]);
 }
